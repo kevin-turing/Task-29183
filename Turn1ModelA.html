@@ -1,1 +1,118 @@
-T1MA
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Starship Explorer</title>
+    <style>
+        body { 
+            background: #000; 
+            color: #fff; 
+            font-family: 'Courier New', monospace; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        #gameCanvas { 
+            border: 1px solid #333; 
+        }
+        #sidebar {
+            padding: 20px;
+            background: #111;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div id="sidebar">
+        <h3>Status</h3>
+        <p id="health">Health: 100</p>
+        <p id="morale">Morale: 100</p>
+        <p id="resources">Resources: 100</p>
+        <button id="upgradeShip">Upgrade Ship</button>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+    // Using a CDN for any libraries like p5.js for simplicity in rendering and events
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    let ship = {x: 400, y: 300, health: 100, morale: 100, resources: 100};
+    let galaxy = [];
+
+    // Procedural Generation
+    function generateGalaxy() {
+        for(let i = 0; i < 100; i++) {
+            galaxy.push({
+                type: Math.random() > 0.8 ? 'planet' : (Math.random() > 0.5 ? 'alien' : 'asteroid'),
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height
+            });
+        }
+    }
+
+    // Game loop
+    function gameLoop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Draw ship
+        ctx.fillStyle = 'blue';
+        ctx.fillRect(ship.x, ship.y, 10, 10);
+        
+        // Draw galaxy objects
+        galaxy.forEach(obj => {
+            ctx.fillStyle = obj.type === 'planet' ? 'green' : (obj.type === 'alien' ? 'red' : 'gray');
+            ctx.fillRect(obj.x, obj.y, 5, 5);
+        });
+
+        // Update and check collisions
+        updateShip();
+        checkCollisions();
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    function updateShip() {
+        // Basic movement - needs key handlers for WASD or arrows
+        if (keys.ArrowLeft) ship.x -= 2;
+        if (keys.ArrowRight) ship.x += 2;
+        if (keys.ArrowUp) ship.y -= 2;
+        if (keys.ArrowDown) ship.y += 2;
+    }
+
+    function checkCollisions() {
+        galaxy.forEach((obj, index) => {
+            if (Math.abs(ship.x - obj.x) < 10 && Math.abs(ship.y - obj.y) < 10) {
+                if(obj.type === 'planet') {
+                    alert('Game Over: You crashed into a planet!');
+                    location.reload(); // Reset game
+                } else if(obj.type === 'alien') {
+                    // Combat logic here
+                } else if(obj.type === 'asteroid') {
+                    ship.health -= 10;
+                    ship.morale -= 5;
+                    galaxy.splice(index, 1); // Remove asteroid
+                }
+                updateStatus();
+            }
+        });
+    }
+
+    function updateStatus() {
+        document.getElementById('health').textContent = `Health: ${ship.health}`;
+        document.getElementById('morale').textContent = `Morale: ${ship.morale}`;
+        document.getElementById('resources').textContent = `Resources: ${ship.resources}`;
+    }
+
+    // Event listeners for keys and upgrades would be added here
+    document.addEventListener('keydown', (event) => {
+        if(event.code === 'Space') {
+            // Fire weapon logic
+        }
+    });
+
+    // Initialize
+    generateGalaxy();
+    gameLoop();
+    </script>
+</body>
+</html>

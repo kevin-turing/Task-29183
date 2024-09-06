@@ -1,1 +1,378 @@
-T1IR
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pixel Starship Explorer v5 (Enhanced Gameplay)</title>
+    <style>
+        body { background: #000; color: #fff; font-family: 'Courier New', monospace; margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        #ui { position: absolute; top: 10px; left: 10px; }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="ui">
+        <div>Health: <span id="health">100</span></div>
+        <div>Fuel: <span id="fuel">100</span></div>
+        <div>Resources: <span id="resources">100</span></div>
+        <button onclick="upgradeShip()">Upgrade Ship</button>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const ship = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    speed: { x: 0, y: 0 },
+    thrust: 0.05,
+    maxSpeed: 3,
+    rotation: -Math.PI / 2,
+    health: 150, // Increased from 100 to 150
+    fuel: 100,
+    resources: 100,
+    isHit: false,
+    hitTime: 0,
+    lastShot: 0
+};
+        const gameObjects = { stars: [], aliens: [], planets: [], asteroids: [], lasers: [], alienLasers: [] };
+        const keys = {};
+
+        function loadSVG(svgString) {
+            const blob = new Blob([svgString], {type: 'image/svg+xml'});
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+            img.src = url;
+            return img;
+        }
+
+        const shipImg = loadSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="28" y="0" width="8" height="8" fill="#00f"/><rect x="20" y="8" width="24" height="8" fill="#00f"/><rect x="12" y="16" width="40" height="8" fill="#00f"/><rect x="4" y="24" width="56" height="16" fill="#00f"/><rect x="12" y="40" width="40" height="8" fill="#00f"/><rect x="20" y="48" width="8" height="8" fill="#00f"/><rect x="36" y="48" width="8" height="8" fill="#00f"/><rect x="24" y="56" width="16" height="8" fill="#f00"/></svg>');
+        const alienImg = loadSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="24" y="0" width="16" height="8" fill="#0f0"/><rect x="16" y="8" width="32" height="8" fill="#0f0"/><rect x="8" y="16" width="48" height="16" fill="#0f0"/><rect x="0" y="32" width="64" height="8" fill="#0f0"/><rect x="16" y="40" width="32" height="8" fill="#0f0"/><rect x="24" y="48" width="16" height="8" fill="#0f0"/><rect x="28" y="56" width="8" height="8" fill="#0f0"/></svg>');
+        const planetImg = loadSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="16" y="0" width="32" height="8" fill="#f00"/><rect x="8" y="8" width="48" height="8" fill="#f00"/><rect x="0" y="16" width="64" height="32" fill="#f00"/><rect x="8" y="48" width="48" height="8" fill="#f00"/><rect x="16" y="56" width="32" height="8" fill="#f00"/><rect x="24" y="16" width="16" height="8" fill="#fff"/><rect x="16" y="24" width="24" height="8" fill="#fff"/></svg>');
+        const asteroidImg = loadSVG('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="8" y="0" width="16" height="8" fill="#888"/><rect x="0" y="8" width="32" height="16" fill="#888"/><rect x="8" y="24" width="16" height="8" fill="#888"/><rect x="16" y="8" width="8" height="8" fill="#aaa"/><rect x="8" y="16" width="8" height="8" fill="#aaa"/></svg>');
+
+        function generateGalaxy() {
+    // Clear existing objects
+    gameObjects.stars = [];
+    gameObjects.aliens = [];
+    gameObjects.planets = [];
+    gameObjects.asteroids = [];
+
+    // Generate new objects
+    for (let i = 0; i < 100; i++) {
+        gameObjects.stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 2 + 1, speed: Math.random() * 0.3 + 0.7 });
+    }
+    for (let i = 0; i < 5; i++) {
+        gameObjects.aliens.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, health: 50, speed: 0.8, lastShot: 0 });
+    }
+    for (let i = 0; i < 3; i++) {
+        gameObjects.planets.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 30 + 20, speed: 0.95 });
+    }
+    for (let i = 0; i < 10; i++) {
+        gameObjects.asteroids.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 10 + 5, speed: { x: (Math.random() - 0.5) * 0.2, y: (Math.random() - 0.5) * 0.2 } });
+    }
+}
+        function drawPixel(x, y, size, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, size, size);
+        }
+
+        function drawSprite(x, y, size, img, rotation = 0, tint = null) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(rotation);
+            
+            if (tint) {
+                ctx.fillStyle = tint;
+                ctx.fillRect(-size/2, -size/2, size, size);
+            }
+            
+            ctx.drawImage(img, -size/2, -size/2, size, size);
+            ctx.restore();
+        }
+        function alienAttack(alien) {
+    if (Date.now() - alien.lastShot > 3000) { // Increased from 2000 to 3000 (3 seconds)
+        let dx = ship.x - alien.x;
+        let dy = ship.y - alien.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        gameObjects.alienLasers.push({
+            x: alien.x,
+            y: alien.y,
+            dx: dx / distance,
+            dy: dy / distance,
+            speed: 2, // Reduced from 3 to 2
+            creation: Date.now()
+        });
+        alien.lastShot = Date.now();
+    }
+}
+function spawnAlien() {
+    let side = Math.floor(Math.random() * 4);
+    let x, y;
+    switch(side) {
+        case 0: // top
+            x = Math.random() * canvas.width;
+            y = 0;
+            break;
+        case 1: // right
+            x = canvas.width;
+            y = Math.random() * canvas.height;
+            break;
+        case 2: // bottom
+            x = Math.random() * canvas.width;
+            y = canvas.height;
+            break;
+        case 3: // left
+            x = 0;
+            y = Math.random() * canvas.height;
+            break;
+    }
+    gameObjects.aliens.push({ x: x, y: y, health: 50, speed: 0.8, lastShot: 0 });
+}
+function moveShip() {
+    if (keys['ArrowLeft']) ship.rotation -= 0.05;
+    if (keys['ArrowRight']) ship.rotation += 0.05;
+    if (keys['ArrowUp'] && ship.fuel > 0) {
+        ship.speed.x += Math.cos(ship.rotation) * ship.thrust;
+        ship.speed.y += Math.sin(ship.rotation) * ship.thrust;
+        ship.fuel = Math.max(0, ship.fuel - 0.05); // Reduced from 0.1 to 0.05
+    }
+
+    // Apply drag
+    ship.speed.x *= 0.99;
+    ship.speed.y *= 0.99;
+
+    // Limit max speed
+    let currentSpeed = Math.sqrt(ship.speed.x**2 + ship.speed.y**2);
+    if (currentSpeed > ship.maxSpeed) {
+        ship.speed.x = (ship.speed.x / currentSpeed) * ship.maxSpeed;
+        ship.speed.y = (ship.speed.y / currentSpeed) * ship.maxSpeed;
+    }
+
+    // Shoot laser
+    if (keys['Space'] && Date.now() - ship.lastShot > 500) { // 0.5 second cooldown
+        gameObjects.lasers.push({
+            x: ship.x + Math.cos(ship.rotation) * 20,
+            y: ship.y + Math.sin(ship.rotation) * 20,
+            speed: { x: Math.cos(ship.rotation) * 5, y: Math.sin(ship.rotation) * 5 },
+            creation: Date.now()
+        });
+        ship.lastShot = Date.now();
+    }
+
+    checkGameOver();
+}
+
+        function moveObject(obj) {
+            obj.x -= ship.speed.x * obj.speed;
+            obj.y -= ship.speed.y * obj.speed;
+
+            // Wrap around screen
+            if (obj.x < 0) obj.x = canvas.width;
+            if (obj.x > canvas.width) obj.x = 0;
+            if (obj.y < 0) obj.y = canvas.height;
+            if (obj.y > canvas.height) obj.y = 0;
+        }
+
+        function moveAsteroid(asteroid) {
+            asteroid.x += asteroid.speed.x - ship.speed.x;
+            asteroid.y += asteroid.speed.y - ship.speed.y;
+
+            // Wrap around screen
+            if (asteroid.x < 0) asteroid.x = canvas.width;
+            if (asteroid.x > canvas.width) asteroid.x = 0;
+            if (asteroid.y < 0) asteroid.y = canvas.height;
+            if (asteroid.y > canvas.height) asteroid.y = 0;
+        }
+
+        function moveLasers() {
+            gameObjects.lasers.forEach((laser, index) => {
+                laser.x += laser.speed.x;
+                laser.y += laser.speed.y;
+
+                // Remove laser if it's off screen or older than 2 seconds
+                if (laser.x < 0 || laser.x > canvas.width || laser.y < 0 || laser.y > canvas.height || Date.now() - laser.creation > 2000) {
+                    gameObjects.lasers.splice(index, 1);
+                }
+            });
+        }
+
+        function checkCollisions() {
+            gameObjects.planets.forEach(planet => {
+        if (distance(ship, planet) < planet.size + 20) {
+            gameOver("You crashed into a planet!");
+        }
+    });
+
+    gameObjects.asteroids.forEach(asteroid => {
+        if (distance(ship, asteroid) < asteroid.size + 20) {
+            ship.health = Math.max(0, ship.health - 2); // Reduced from 5 to 2
+            ship.isHit = true;
+            ship.hitTime = Date.now();
+            updateUI();
+            checkGameOver();
+        }
+    });
+
+    gameObjects.lasers.forEach((laser, laserIndex) => {
+        gameObjects.aliens.forEach((alien, alienIndex) => {
+            if (distance(laser, alien) < 20) {
+                gameObjects.aliens.splice(alienIndex, 1);
+                gameObjects.lasers.splice(laserIndex, 1);
+                ship.resources = Math.min(100, ship.resources + 15); // Increased from 10 to 15
+                ship.fuel = Math.min(100, ship.fuel + 20); // Increased from 15 to 20
+                ship.health = Math.min(100, ship.health + 10); // Increased from 5 to 10
+                updateUI();
+                spawnAlien();
+            }
+        });
+    });
+}
+
+function checkGameOver() {
+    if (ship.health <= 0) {
+        gameOver("Your ship was destroyed!");
+    } else if (ship.fuel <= 0) {
+        gameOver("You ran out of fuel!");
+    }
+}
+
+        function distance(obj1, obj2) {
+            return Math.sqrt((obj1.x - obj2.x) ** 2 + (obj1.y - obj2.y) ** 2);
+        }
+
+        function updateUI() {
+            document.getElementById('health').textContent = Math.round(ship.health);
+            document.getElementById('fuel').textContent = Math.round(ship.fuel);
+            document.getElementById('resources').textContent = Math.round(ship.resources);
+        }
+
+        function upgradeShip() {
+            if (ship.resources >= 20) {
+                ship.maxSpeed += 0.5;
+                ship.resources = Math.max(0, ship.resources - 20);
+                updateUI();
+            }
+        }
+
+        function gameLoop() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            moveShip();
+            moveLasers();
+
+            gameObjects.stars.forEach(star => {
+                moveObject(star);
+                drawPixel(star.x, star.y, star.size, '#fff');
+            });
+
+            gameObjects.planets.forEach(planet => {
+                moveObject(planet);
+                drawSprite(planet.x, planet.y, planet.size * 2, planetImg);
+            });
+
+            gameObjects.asteroids.forEach(asteroid => {
+                moveAsteroid(asteroid);
+                drawSprite(asteroid.x, asteroid.y, asteroid.size * 2, asteroidImg);
+            });
+
+            gameObjects.aliens.forEach(alien => {
+        moveObject(alien);
+        drawSprite(alien.x, alien.y, 40, alienImg);
+        alienAttack(alien);
+    });
+
+    gameObjects.alienLasers.forEach((laser, index) => {
+        // Move laser relative to ship's movement
+        laser.x += laser.dx * laser.speed - ship.speed.x;
+        laser.y += laser.dy * laser.speed - ship.speed.y;
+
+        ctx.fillStyle = '#0f0';
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (distance(laser, ship) < 20) {
+    ship.health = Math.max(0, ship.health - 5); // Reduced from 10 to 5
+    ship.isHit = true;
+    ship.hitTime = Date.now();
+    gameObjects.alienLasers.splice(index, 1);
+    updateUI();
+    checkGameOver();
+}
+
+        if (laser.x < 0 || laser.x > canvas.width || laser.y < 0 || laser.y > canvas.height || Date.now() - laser.creation > 3000) {
+            gameObjects.alienLasers.splice(index, 1);
+        }
+    });
+
+
+
+            gameObjects.lasers.forEach(laser => {
+                ctx.fillStyle = '#f00';
+                ctx.beginPath();
+                ctx.arc(laser.x, laser.y, 2, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            let shipTint = null;
+            if (ship.isHit && Date.now() - ship.hitTime < 1000) {
+                shipTint = 'rgba(255, 0, 0, 0.5)';
+            } else {
+                ship.isHit = false;
+            }
+            drawSprite(ship.x, ship.y, 40, shipImg, ship.rotation, shipTint);
+
+            checkCollisions();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        generateGalaxy();
+        gameLoop();
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            e.preventDefault(); // Prevent default behavior for arrow keys
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            e.preventDefault(); // Prevent default behavior for arrow keys
+        });
+function gameOver(reason) {
+    alert(`Game Over! ${reason}`);
+    resetGame();
+}
+function resetGame() {
+    // Reset ship
+    ship.x = canvas.width / 2;
+    ship.y = canvas.height / 2;
+    ship.speed = { x: 0, y: 0 };
+    ship.rotation = -Math.PI / 2;
+    ship.health = 150;
+    ship.fuel = 100;
+    ship.resources = 100;
+    ship.isHit = false;
+    ship.hitTime = 0;
+    ship.lastShot = 0;
+
+    // Clear game objects
+    gameObjects.stars = [];
+    gameObjects.aliens = [];
+    gameObjects.planets = [];
+    gameObjects.asteroids = [];
+    gameObjects.lasers = [];
+    gameObjects.alienLasers = [];
+
+    // Regenerate the galaxy
+    generateGalaxy();
+
+    // Update UI
+    updateUI();
+}
+    </script>
+</body>
+</html>

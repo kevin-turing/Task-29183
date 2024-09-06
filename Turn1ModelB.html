@@ -1,1 +1,162 @@
-T1MB
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Starship Explorer</title>
+<style>
+  body { 
+    background: black; 
+    color: white; 
+    font-family: 'Courier New', monospace; 
+  }
+  canvas { 
+    border: 1px solid white; 
+    display: block; 
+    margin: 0 auto; 
+  }
+  #ui {
+    text-align: center;
+    margin-top: 10px;
+  }
+  button {
+    margin: 5px;
+    padding: 5px 10px;
+    background: #333;
+    color: white;
+    border: none;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas" width="800" height="600"></canvas>
+<div id="ui">
+  <button onclick="upgradeShip()">Upgrade Ship</button>
+  <button onclick="manageResources()">Manage Resources</button>
+  <button onclick="crewMorale()">Boost Crew Morale</button>
+</div>
+<script>
+// Game setup
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.tabIndex = 1; // Make canvas focusable for key events
+
+// Game variables
+let ship = {x: 400, y: 300, speed: 2, health: 100, morale: 100, resources: 100};
+let aliens = [];
+let planets = [];
+let asteroids = [];
+let gameLoop;
+
+// Key handling
+const keys = {};
+document.addEventListener('keydown', (e) => keys[e.code] = true);
+document.addEventListener('keyup', (e) => keys[e.code] = false);
+
+// Procedural generation setup (simplified)
+function generateGalaxy() {
+    for(let i = 0; i < 5; i++) {
+        aliens.push({x: Math.random() * canvas.width, y: Math.random() * canvas.height});
+        planets.push({x: Math.random() * canvas.width, y: Math.random() * canvas.height});
+        asteroids.push({x: Math.random() * canvas.width, y: Math.random() * canvas.height, size: Math.random() * 20 + 5});
+    }
+}
+
+// Game loop
+function game() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Move ship
+    if(keys['ArrowUp']) ship.y -= ship.speed;
+    if(keys['ArrowDown']) ship.y += ship.speed;
+    if(keys['ArrowLeft']) ship.x -= ship.speed;
+    if(keys['ArrowRight']) ship.x += ship.speed;
+    
+    // Keep ship within bounds
+    ship.x = Math.max(0, Math.min(ship.x, canvas.width));
+    ship.y = Math.max(0, Math.min(ship.y, canvas.height));
+    
+    // Draw ship
+    ctx.fillStyle = 'white';
+    ctx.fillRect(ship.x, ship.y, 20, 20);
+    
+    // Draw and handle interactions with aliens, planets, and asteroids
+    drawAndCheckCollisions(aliens, 'red', 20, 'alien');
+    drawAndCheckCollisions(planets, 'green', 30, 'planet');
+    drawAndCheckCollisions(asteroids, 'grey', (a) => a.size, 'asteroid');
+    
+    // Attack with spacebar
+    if(keys['Space']) {
+        // Simplified attack mechanism
+        aliens = aliens.filter(alien => !collision({x: ship.x, y: ship.y, width: 20, height: 20}, {x: alien.x, y: alien.y, width: 20, height: 20}));
+    }
+    
+    // UI update
+    ctx.fillText(`Health: ${ship.health} Morale: ${ship.morale} Resources: ${ship.resources}`, 10, 20);
+    
+    requestAnimationFrame(game);
+}
+
+function drawAndCheckCollisions(items, color, size, type) {
+    ctx.fillStyle = color;
+    items.forEach(item => {
+        if(typeof size === 'function') {
+            ctx.beginPath();
+            ctx.arc(item.x, item.y, size(item), 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.fillRect(item.x, item.y, size, size);
+        }
+        
+        if(collision(ship, item, size)) {
+            switch(type) {
+                case 'planet': 
+                    alert('You crashed into a planet! Game Over.');
+                    clearInterval(gameLoop);
+                    break;
+                case 'asteroid':
+                    ship.health -= 5; // Simplified damage
+                    ship.morale -= 2;
+                    ship.resources -= 1;
+                    break;
+                case 'alien':
+                    // Here you would implement combat logic
+                    break;
+            }
+        }
+    });
+}
+
+function collision(obj1, obj2, sizeObj2 = 20) {
+    return obj1.x < obj2.x + sizeObj2 && 
+           obj1.x + 20 > obj2.x && 
+           obj1.y < obj2.y + sizeObj2 && 
+           obj1.y + 20 > obj2.y;
+}
+
+// Game functions for UI
+function upgradeShip() {
+    if(ship.resources >= 10) {
+        ship.speed += 0.5;
+        ship.resources -= 10;
+    }
+}
+
+function manageResources() {
+    // Placeholder for resource management
+    alert('Resource management feature coming soon!');
+}
+
+function crewMorale() {
+    if(ship.resources >= 5) {
+        ship.morale += 10;
+        ship.resources -= 5;
+    }
+}
+
+// Start game
+generateGalaxy();
+gameLoop = setInterval(game, 1000/60);
+</script>
+</body>
+</html>
